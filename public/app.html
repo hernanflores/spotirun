@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SpotiRun App</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>Generate Playlist</h1>
+        <p>Enter pace in <strong>min/km</strong> (e.g. <code>5:30</code> or <code>5.5</code>).</p>
+
+        <form id="playlistForm">
+          <label for="pace">Pace (min/km)</label>
+          <input id="pace" name="pace" placeholder="5:30" required />
+
+          <div class="row">
+            <div>
+              <label for="durationMin">Duration (minutes, optional)</label>
+              <input id="durationMin" name="durationMin" type="number" min="1" step="1" placeholder="45" />
+            </div>
+            <div>
+              <label for="distanceKm">Distance (km, optional; preferred if both set)</label>
+              <input id="distanceKm" name="distanceKm" type="number" min="0" step="0.1" placeholder="10" />
+            </div>
+          </div>
+          <p class="meta">Use duration or distance. If both are set, distance is used.</p>
+
+          <label for="energyLevel">Energy (1-5)</label>
+          <input id="energyLevel" name="energyLevel" type="range" min="1" max="5" value="3" />
+          <div class="range-labels" aria-hidden="true">
+            <span>1</span>
+            <span>2</span>
+            <span>3</span>
+            <span>4</span>
+            <span>5</span>
+          </div>
+          <p id="energyText" class="meta">Energy: 3 (balanced)</p>
+
+          <label class="inline" for="halfTimeFeel">
+            <input id="halfTimeFeel" name="halfTimeFeel" type="checkbox" />
+            Use half-time feel (2:1, BPM ~= cadence/2)
+          </label>
+
+          <label class="inline" for="explicitOk">
+            <input id="explicitOk" name="explicitOk" type="checkbox" />
+            Allow explicit tracks
+          </label>
+
+          <div class="preview" id="tempoPreview" aria-live="polite">
+            <strong>Preview:</strong>
+            <span id="previewText">Enter a pace to see cadence and BPM.</span>
+          </div>
+
+          <button type="submit" id="submitBtn">Generate Playlist</button>
+          <button type="button" class="secondary" id="logoutBtn">Disconnect</button>
+          <div id="error" class="error" role="alert"></div>
+        </form>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

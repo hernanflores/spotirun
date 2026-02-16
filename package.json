@@ -1,0 +1,18 @@
+{
+  "name": "spotirun",
+  "version": "1.0.0",
+  "description": "Generate Spotify running playlists from pace using OAuth PKCE",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2"
+  }
+}

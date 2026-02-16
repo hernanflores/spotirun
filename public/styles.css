@@ -1,0 +1,162 @@
+:root {
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --text: #1a2433;
+  --muted: #4d6078;
+  --accent: #1db954;
+  --accent-2: #158f41;
+  --error: #b42318;
+  --border: #d6e0ec;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: linear-gradient(180deg, #f4f7fb 0%, #e9f1fc 100%);
+  color: var(--text);
+}
+
+main {
+  max-width: 720px;
+  margin: 48px auto;
+  padding: 0 20px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 8px 30px rgba(16, 40, 82, 0.08);
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: 1.75rem;
+}
+
+p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+label {
+  display: block;
+  margin-top: 14px;
+  font-weight: 600;
+}
+
+input,
+select,
+button {
+  width: 100%;
+  font: inherit;
+}
+
+input,
+select {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.inline input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+
+button {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-2);
+}
+
+button.secondary {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.error {
+  color: var(--error);
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.95rem;
+  margin-top: 14px;
+}
+
+.range-labels {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.range-labels span {
+  text-align: center;
+}
+
+.preview {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fafcff;
+  color: var(--text);
+}
+
+.preview strong {
+  margin-right: 6px;
+}
+
+.muted-input {
+  opacity: 0.65;
+}
+
+a.link {
+  color: #0958d9;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+
+  main {
+    margin: 28px auto;
+  }
+}
