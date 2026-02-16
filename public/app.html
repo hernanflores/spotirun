@@ -10,11 +10,11 @@
     <main>
       <section class="card">
         <h1>Generate Playlist</h1>
-        <p>Enter pace in <strong>min/km</strong> (e.g. <code>5:30</code> or <code>5.5</code>).</p>
+        <p>Create a private run playlist from your Spotify top tracks.</p>
 
         <form id="playlistForm">
-          <label for="pace">Pace (min/km)</label>
-          <input id="pace" name="pace" placeholder="5:30" required />
+          <label for="pace">Pace (min/km, optional unless distance is set)</label>
+          <input id="pace" name="pace" placeholder="5:30 or 5.5" />
 
           <div class="row">
             <div>
@@ -28,31 +28,10 @@
           </div>
           <p class="meta">Use duration or distance. If both are set, distance is used.</p>
 
-          <label for="energyLevel">Energy (1-5)</label>
-          <input id="energyLevel" name="energyLevel" type="range" min="1" max="5" value="3" />
-          <div class="range-labels" aria-hidden="true">
-            <span>1</span>
-            <span>2</span>
-            <span>3</span>
-            <span>4</span>
-            <span>5</span>
-          </div>
-          <p id="energyText" class="meta">Energy: 3 (balanced)</p>
-
-          <label class="inline" for="halfTimeFeel">
-            <input id="halfTimeFeel" name="halfTimeFeel" type="checkbox" />
-            Use half-time feel (2:1, BPM ~= cadence/2)
-          </label>
-
           <label class="inline" for="explicitOk">
             <input id="explicitOk" name="explicitOk" type="checkbox" />
             Allow explicit tracks
           </label>
-
-          <div class="preview" id="tempoPreview" aria-live="polite">
-            <strong>Preview:</strong>
-            <span id="previewText">Enter a pace to see cadence and BPM.</span>
-          </div>
 
           <button type="submit" id="submitBtn">Generate Playlist</button>
           <button type="button" class="secondary" id="logoutBtn">Disconnect</button>

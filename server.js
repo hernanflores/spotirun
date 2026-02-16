@@ -2,12 +2,7 @@ const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const {
-  parsePace,
-  estimateCadence,
-  targetTempo,
-  tempoToleranceSteps
-} = require('./lib/pace-tempo');
+const { parsePace } = require('./lib/pace-tempo');
 
 const app = express();
 
@@ -34,8 +29,7 @@ const REDIRECT_URI = `${APP_ORIGIN}/callback`;
 const SPOTIFY_ACCOUNTS_BASE = 'https://accounts.spotify.com';
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
-const SCOPES = ['playlist-modify-private', 'user-read-private'];
-const CURATED_SEED_GENRES = ['techno', 'house', 'electronic', 'drum-and-bass', 'dance'];
+const SCOPES = ['playlist-modify-private', 'user-read-private', 'user-top-read'];
 const MAX_SPOTIFY_RETRIES = 2;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
@@ -263,7 +257,7 @@ async function refreshAccessTokenIfNeeded(req, res) {
 }
 
 function computeTargetDurationMs({ paceMinPerKm, distanceKm, durationMin }) {
-  if (Number.isFinite(distanceKm) && distanceKm > 0) {
+  if (Number.isFinite(distanceKm) && distanceKm > 0 && Number.isFinite(paceMinPerKm) && paceMinPerKm > 0) {
     return distanceKm * paceMinPerKm * 60 * 1000;
   }
 
@@ -274,43 +268,12 @@ function computeTargetDurationMs({ paceMinPerKm, distanceKm, durationMin }) {
   return 45 * 60 * 1000;
 }
 
-function mapEnergyLevel(level1to5) {
-  const clamped = Math.max(1, Math.min(5, Number(level1to5) || 3));
-  return 0.2 + ((clamped - 1) / 4) * 0.7;
-}
-
-function makeRecommendationQuery({ targetTempo, targetEnergy }) {
-  const query = new URLSearchParams({
-    limit: '100',
-    seed_genres: CURATED_SEED_GENRES.join(','),
-    target_tempo: String(targetTempo),
-    target_energy: String(targetEnergy.toFixed(2))
-  });
-
-  return query.toString();
-}
-
 function normalizeGeneratePayload(body) {
-  const pace = body?.pace;
+  const paceRaw = body?.pace;
   const distanceKmRaw = body?.distance_km ?? body?.distanceKm;
   const durationMinutesRaw = body?.duration_minutes ?? body?.durationMin;
-  const energyRaw = body?.energy ?? body?.energyLevel;
   const explicitOkRaw = body?.explicit_ok;
-  const feelRaw = body?.feel;
-
-  if (pace == null || String(pace).trim() === '') {
-    throw new HttpError(400, 'Missing pace', 'Pace is required (example: 5:30).');
-  }
-
-  const energy = Number(energyRaw ?? 3);
-  if (!Number.isFinite(energy) || energy < 1 || energy > 5) {
-    throw new HttpError(400, 'Invalid energy', 'Energy must be a number from 1 to 5.');
-  }
-
-  const feel = feelRaw == null || feelRaw === '' ? 'step' : String(feelRaw);
-  if (feel !== 'step' && feel !== 'half_time') {
-    throw new HttpError(400, 'Invalid feel', 'Feel must be either \"step\" or \"half_time\".');
-  }
+  const pace = paceRaw == null ? '' : String(paceRaw).trim();
 
   const durationMinutes = durationMinutesRaw == null || durationMinutesRaw === '' ? NaN : Number(durationMinutesRaw);
   if (!Number.isNaN(durationMinutes) && (!Number.isFinite(durationMinutes) || durationMinutes <= 0)) {
@@ -322,32 +285,83 @@ function normalizeGeneratePayload(body) {
     throw new HttpError(400, 'Invalid distance_km', 'distance_km must be a positive number.');
   }
 
+  if (!Number.isNaN(distanceKm) && distanceKm > 0 && !pace) {
+    throw new HttpError(400, 'Missing pace for distance', 'Pace is required when distance is provided.');
+  }
+
   return {
     pace,
     durationMinutes,
     distanceKm,
-    energy,
-    explicitOk: Boolean(explicitOkRaw),
-    feel
+    explicitOk: Boolean(explicitOkRaw)
   };
 }
 
-async function getAudioFeaturesByTrackId(accessToken, trackIds) {
-  const result = new Map();
+async function getUserTopTracks(accessToken, maxTracks = 100) {
+  const tracks = [];
+  const limit = 50;
 
-  for (let i = 0; i < trackIds.length; i += 100) {
-    const batch = trackIds.slice(i, i + 100);
-    if (batch.length === 0) continue;
-    const query = new URLSearchParams({ ids: batch.join(',') });
-    const data = await spotifyApiRequest(accessToken, `/audio-features?${query.toString()}`);
-    for (const item of data.audio_features || []) {
-      if (item && item.id && Number.isFinite(item.tempo)) {
-        result.set(item.id, item.tempo);
+  for (let offset = 0; offset < maxTracks; offset += limit) {
+    const remaining = Math.min(limit, maxTracks - offset);
+    const query = new URLSearchParams({
+      limit: String(remaining),
+      offset: String(offset),
+      time_range: 'medium_term'
+    });
+
+    const data = await spotifyApiRequest(accessToken, `/me/top/tracks?${query.toString()}`);
+    const items = data.items || [];
+    tracks.push(...items);
+
+    if (items.length < remaining) {
+      break;
+    }
+  }
+
+  return tracks;
+}
+
+function pickTracksForDuration(tracks, targetDurationMs) {
+  const shuffled = [...tracks];
+  shuffled.sort(() => Math.random() - 0.5);
+
+  const selectedUris = [];
+  let totalDuration = 0;
+  let extraAfterTarget = 0;
+  const maxExtraTracksAfterTarget = 2;
+  let reachedTargetDuration = false;
+
+  for (const track of shuffled) {
+    selectedUris.push(track.uri);
+    totalDuration += Number(track.duration_ms || 0);
+
+    if (!reachedTargetDuration && totalDuration >= targetDurationMs) {
+      reachedTargetDuration = true;
+      continue;
+    }
+
+    if (reachedTargetDuration) {
+      extraAfterTarget += 1;
+      if (extraAfterTarget >= maxExtraTracksAfterTarget) {
+        break;
       }
     }
   }
 
-  return result;
+  return { selectedUris, totalDuration };
+}
+
+function sanitizeTopTrack(track) {
+  return {
+    id: track.id,
+    name: track.name,
+    artists: (track.artists || []).map((artist) => artist.name).filter(Boolean),
+    explicit: Boolean(track.explicit),
+    duration_ms: Number(track.duration_ms || 0),
+    popularity: Number(track.popularity || 0),
+    uri: track.uri,
+    spotify_url: track.external_urls?.spotify || null
+  };
 }
 
 app.get('/auth/login', (req, res) => {
@@ -433,6 +447,47 @@ app.get('/api/session', async (req, res) => {
   }
 });
 
+app.get('/api/top-tracks', async (req, res) => {
+  try {
+    const accessToken = await refreshAccessTokenIfNeeded(req, res);
+    if (!accessToken) {
+      return res.status(401).json({
+        error: 'Not authenticated with Spotify.',
+        user_message: 'Connect Spotify before fetching top tracks.'
+      });
+    }
+
+    const limitRaw = req.query.limit;
+    const explicitRaw = req.query.explicit_ok;
+    const limitNum = Number(limitRaw);
+    const limit = Number.isFinite(limitNum) ? Math.max(1, Math.min(50, Math.trunc(limitNum))) : 20;
+    const explicitOk = String(explicitRaw || '').toLowerCase() === 'true';
+
+    const topTracks = await getUserTopTracks(accessToken, 100);
+    const filtered = topTracks.filter((track) => {
+      if (!track || !track.id || !track.uri) return false;
+      if (!explicitOk && track.explicit) return false;
+      return true;
+    });
+
+    const preview = filtered.slice(0, limit).map(sanitizeTopTrack);
+
+    return res.json({
+      source: 'top_tracks',
+      total_available: filtered.length,
+      returned: preview.length,
+      explicit_ok: explicitOk,
+      tracks: preview
+    });
+  } catch (err) {
+    const status = err instanceof HttpError ? err.status : 500;
+    const userMessage = err instanceof HttpError ? err.userMessage : 'Failed to load top tracks.';
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+    console.error(`top-tracks error (${status}): ${errorMessage}`);
+    return res.status(status).json({ error: errorMessage, user_message: userMessage });
+  }
+});
+
 app.post('/api/logout', requireSameOrigin, (req, res) => {
   clearAuthCookies(res);
   res.status(204).send();
@@ -446,16 +501,15 @@ app.post('/api/generate-playlist', requireSameOrigin, rateLimitGeneratePlaylist,
     }
 
     const normalized = normalizeGeneratePayload(req.body || {});
-    let paceMinPerKm;
-    try {
-      paceMinPerKm = parsePace(normalized.pace);
-    } catch (err) {
-      throw new HttpError(400, err instanceof Error ? err.message : 'Invalid pace', 'Invalid pace. Use formats like 5:30 or 5.5 min/km.');
+
+    let paceMinPerKm = NaN;
+    if (normalized.pace) {
+      try {
+        paceMinPerKm = parsePace(normalized.pace);
+      } catch (err) {
+        throw new HttpError(400, err instanceof Error ? err.message : 'Invalid pace', 'Invalid pace. Use formats like 5:30 or 5.5 min/km.');
+      }
     }
-    const cadenceSpm = estimateCadence(paceMinPerKm);
-    const tempoMode = normalized.feel === 'half_time' ? 'half_time' : 'one_to_one';
-    const finalTargetTempoBpm = targetTempo(cadenceSpm, tempoMode);
-    const targetEnergy = mapEnergyLevel(normalized.energy);
 
     const targetDurationMs = computeTargetDurationMs({
       paceMinPerKm,
@@ -463,93 +517,32 @@ app.post('/api/generate-playlist', requireSameOrigin, rateLimitGeneratePlaylist,
       durationMin: normalized.durationMinutes
     });
 
-    const toleranceSteps = tempoToleranceSteps();
-    const filteredTrackMap = new Map();
-    let toleranceUsed = toleranceSteps[toleranceSteps.length - 1];
+    const topTracks = await getUserTopTracks(accessToken, 100);
+    const tracks = topTracks.filter((track) => {
+      if (!track || !track.id || !track.uri) return false;
+      if (!normalized.explicitOk && track.explicit) return false;
+      return true;
+    });
 
-    for (const tolerance of toleranceSteps) {
-      const query = makeRecommendationQuery({ targetTempo: finalTargetTempoBpm, targetEnergy });
-      const recs = await spotifyApiRequest(accessToken, `/recommendations?${query}`);
-      const candidates = (recs.tracks || []).filter((track) => {
-        if (!track || !track.id || !track.uri) return false;
-        if (!normalized.explicitOk && track.explicit) return false;
-        return true;
-      });
-
-      const tempoById = await getAudioFeaturesByTrackId(
-        accessToken,
-        candidates.map((track) => track.id)
-      );
-
-      for (const track of candidates) {
-        const tempo = tempoById.get(track.id);
-        if (!Number.isFinite(tempo)) continue;
-        if (Math.abs(tempo - finalTargetTempoBpm) <= tolerance && !filteredTrackMap.has(track.id)) {
-          filteredTrackMap.set(track.id, { ...track, tempo });
-        }
-      }
-
-      let runningDuration = 0;
-      for (const track of filteredTrackMap.values()) {
-        runningDuration += track.duration_ms;
-        if (runningDuration >= targetDurationMs) {
-          toleranceUsed = tolerance;
-          break;
-        }
-      }
-
-      if (runningDuration >= targetDurationMs) {
-        break;
-      }
-    }
-
-    const tracks = Array.from(filteredTrackMap.values());
-    tracks.sort(() => Math.random() - 0.5);
-
-    const selectedUris = [];
-    let totalDuration = 0;
-    let extraAfterTarget = 0;
-    const maxExtraTracksAfterTarget = 2;
-    let reachedTargetDuration = false;
-
-    for (const track of tracks) {
-      selectedUris.push(track.uri);
-      totalDuration += track.duration_ms;
-
-      if (!reachedTargetDuration && totalDuration >= targetDurationMs) {
-        reachedTargetDuration = true;
-        continue;
-      }
-
-      if (reachedTargetDuration) {
-        extraAfterTarget += 1;
-        if (extraAfterTarget >= maxExtraTracksAfterTarget) {
-          break;
-        }
-      }
-
-      if (!reachedTargetDuration && selectedUris.length >= tracks.length) {
-        break;
-      }
-    }
+    const { selectedUris, totalDuration } = pickTracksForDuration(tracks, targetDurationMs);
 
     if (selectedUris.length === 0) {
       return res.status(404).json({
-        error: 'No suitable tracks found for this pace and settings.',
-        user_message: 'No tracks matched your pace/tempo settings. Try a nearby pace or higher energy.'
+        error: 'No suitable favorite tracks found.',
+        user_message: 'No favorite tracks matched your explicit-content setting. Try allowing explicit tracks.'
       });
     }
 
     const me = await spotifyApiRequest(accessToken, '/me');
-    const paceLabel = typeof normalized.pace === 'string' ? normalized.pace : String(normalized.pace);
     const durationMinutesRounded = Math.round(targetDurationMs / 60000);
-    const playlistName = `Run ${paceLabel}/km • ${durationMinutesRounded}min • ~${finalTargetTempoBpm} BPM`;
+    const playlistName = `Run Mix • ${durationMinutesRounded}min • Top Tracks`;
+    const playlistDescription = 'Generated from your Spotify top tracks.';
 
     const playlist = await spotifyApiRequest(accessToken, `/users/${encodeURIComponent(me.id)}/playlists`, {
       method: 'POST',
       body: JSON.stringify({
         name: playlistName,
-        description: `Generated from pace ${paceLabel}/km. Cadence ${cadenceSpm} SPM, target tempo ${finalTargetTempoBpm} BPM.`,
+        description: playlistDescription,
         public: false
       })
     });
@@ -566,12 +559,9 @@ app.post('/api/generate-playlist', requireSameOrigin, rateLimitGeneratePlaylist,
       playlist_url: playlist.external_urls.spotify,
       playlist_id: playlist.id,
       stats: {
-        tempo: finalTargetTempoBpm,
-        toleranceUsed,
         tracks: selectedUris.length,
         minutes: Math.round(totalDuration / 60000),
-        cadenceSpm,
-        paceMinPerKm
+        source: 'top_tracks'
       }
     });
   } catch (err) {

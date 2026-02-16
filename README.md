@@ -11,7 +11,7 @@ Minimal Node 20 + Express + vanilla JS app that generates a Spotify running play
 - Server (`server.js`)
   - Spotify OAuth Authorization Code with PKCE.
   - Keeps OAuth state, PKCE verifier, access token, and refresh token only in HTTP-only cookies.
-  - Calls Spotify Web API to recommend tracks, create playlist, and add tracks.
+  - Calls Spotify Web API to fetch user's top tracks, create playlist, and add tracks.
 
 ## OAuth Scopes (Minimum)
 
@@ -19,8 +19,8 @@ Minimal Node 20 + Express + vanilla JS app that generates a Spotify running play
   - Create private playlists and add tracks.
 - `user-read-private`
   - Read `/me` to get the Spotify user ID for playlist creation endpoint.
-
-No extra scopes (for top tracks/listening history) are requested.
+- `user-top-read`
+  - Read `/me/top/tracks` to build playlist from user's favorites.
 
 ## Endpoints
 
@@ -31,7 +31,8 @@ No extra scopes (for top tracks/listening history) are requested.
 - `GET /callback` - OAuth callback (registered in Spotify Dashboard).
 - `GET /auth/callback` - Backward-compatible alias to callback.
 - `GET /api/session` - Session/auth check.
-- `POST /api/generate-playlist` - Create playlist from pace input.
+- `GET /api/top-tracks` - Debug preview of favorite tracks used for playlist generation.
+- `POST /api/generate-playlist` - Create playlist from user's top tracks (duration/distance aware).
 - `POST /api/logout` - Clear auth cookies.
 - `GET /health` - Liveness endpoint.
 
@@ -75,6 +76,18 @@ npm run dev
   - In-memory limiter on `POST /api/generate-playlist` (10 requests/min per IP).
 - Upstream resilience:
   - Spotify API retries for transient errors (429/5xx), max 2 retries.
+
+## Debugging Top Tracks
+
+- Endpoint: `GET /api/top-tracks`
+- Query params:
+  - `limit` (optional, `1..50`, default `20`)
+  - `explicit_ok` (optional, `true|false`, default `false`)
+- Example:
+
+```bash
+curl -s "http://localhost:3000/api/top-tracks?limit=10&explicit_ok=true"
+```
 
 ## Deploy
 
