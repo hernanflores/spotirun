@@ -1,5 +1,33 @@
 # SpotiRun
 
+> **Archived:** This project is no longer under active development.
+
+## Why This Project Was Archived
+
+SpotiRun was intended to build running playlists whose song tempo and energy
+matched a runner's pace. That is no longer practical using only Spotify's Web
+API.
+
+Spotify deprecated its Audio Features and Recommendations endpoints and
+restricted them for development-mode applications and new Web API use cases.
+Those endpoints supplied per-track tempo and energy data and allowed
+recommendations to be filtered by attributes such as `target_tempo` and
+`target_energy`. Spotify's supported Search API cannot query or filter tracks
+by either attribute.
+
+The implementation in this repository therefore does not match songs to a
+runner's pace. It uses pace and distance only to calculate the desired playlist
+duration, then randomly selects songs from the user's Spotify top tracks until
+that duration is reached. The local cadence and target-tempo utilities are not
+connected to Spotify track selection.
+
+Implementing the original concept now requires a separate, appropriately
+licensed source of BPM and energy metadata, plus a reliable way to map that
+catalogue to Spotify tracks. That would no longer be a Spotify-only application
+and would materially increase its operational and licensing complexity, so the
+project has been archived. The documentation below is retained for historical
+reference.
+
 Minimal Node 20 + Express + vanilla JS app that generates a Spotify running playlist from pace (min/km).
 
 ## Architecture Summary
